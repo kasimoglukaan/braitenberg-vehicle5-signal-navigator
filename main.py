@@ -9,13 +9,10 @@ from vehicle import Vehicle
 pygame.init()
 
 SIMULATION_WIDTH = 780
-DASHBOARD_WIDTH = 340
+DASHBOARD_WIDTH = 370
 
-HEIGHT = 770
-WIDTH = (
-    SIMULATION_WIDTH
-    + DASHBOARD_WIDTH
-)
+HEIGHT = 910
+WIDTH = SIMULATION_WIDTH + DASHBOARD_WIDTH
 
 screen = pygame.display.set_mode(
     (WIDTH, HEIGHT)
@@ -38,32 +35,32 @@ label_font = pygame.font.SysFont(
 def create_lights():
     return [
         Light(
-            160,
-            160,
+            145,
+            145,
             (255, 215, 70),
             "1",
         ),
         Light(
             590,
-            145,
+            150,
             (255, 150, 70),
             "2",
         ),
         Light(
+            660,
             650,
-            550,
             (255, 100, 130),
             "3",
         ),
         Light(
-            210,
-            570,
+            190,
+            700,
             (170, 110, 255),
             "4",
         ),
         Light(
-            400,
-            350,
+            410,
+            410,
             (80, 220, 180),
             "5",
         ),
@@ -77,10 +74,7 @@ def reset_simulation():
         heading=0,
     )
 
-    new_logic_network = (
-        LogicNetwork()
-    )
-
+    new_logic_network = LogicNetwork()
     new_lights = create_lights()
 
     return (
@@ -108,8 +102,10 @@ running = True
 
 while running:
     for event in pygame.event.get():
-        # Slider olaylarını önce işle.
-        dashboard.handle_event(event)
+        dashboard.handle_event(
+            event,
+            logic_network,
+        )
 
         if event.type == pygame.QUIT:
             running = False
@@ -122,33 +118,27 @@ while running:
                 paused = not paused
 
             elif event.key == pygame.K_r:
+                selected_mode = logic_network.mode
+
                 (
                     vehicle,
                     logic_network,
                     lights,
                 ) = reset_simulation()
 
+                logic_network.set_mode(
+                    selected_mode
+                )
+
                 selected_light = None
 
-        elif (
-            event.type
-            == pygame.MOUSEBUTTONDOWN
-        ):
-            # Sadece sol taraftaki simülasyon
-            # alanında ışık işlemi yapılır.
-            if (
-                event.pos[0]
-                < SIMULATION_WIDTH
-            ):
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            if event.pos[0] < SIMULATION_WIDTH:
                 if event.button == 1:
                     selected_light = None
 
-                    for light in reversed(
-                        lights
-                    ):
-                        if light.contains(
-                            event.pos
-                        ):
+                    for light in reversed(lights):
+                        if light.contains(event.pos):
                             selected_light = light
                             break
 
@@ -166,23 +156,16 @@ while running:
                         )
                     )
 
-        elif (
-            event.type
-            == pygame.MOUSEBUTTONUP
-        ):
+        elif event.type == pygame.MOUSEBUTTONUP:
             if event.button == 1:
                 selected_light = None
 
-        elif (
-            event.type
-            == pygame.MOUSEMOTION
-        ):
+        elif event.type == pygame.MOUSEMOTION:
             if selected_light is not None:
                 mouse_x = max(
                     20,
                     min(
-                        SIMULATION_WIDTH
-                        - 20,
+                        SIMULATION_WIDTH - 20,
                         event.pos[0],
                     ),
                 )
@@ -199,8 +182,10 @@ while running:
                     (mouse_x, mouse_y)
                 )
 
-    # Slider değerlerini araca aktar.
-    dashboard.apply_settings(vehicle)
+    dashboard.apply_settings(
+        vehicle,
+        logic_network,
+    )
 
     if not paused:
         vehicle.update(
@@ -224,14 +209,15 @@ while running:
             )
 
             if (
-                distance
-                <= detection_distance
+                distance <= detection_distance
                 and not light.detected
             ):
                 light.detected = True
 
                 output_active = (
-                    logic_network.receive_pulse()
+                    logic_network.receive_pulse(
+                        light.label
+                    )
                 )
 
                 if output_active:
@@ -247,7 +233,6 @@ while running:
         (235, 238, 245)
     )
 
-    # Simülasyon arka planı
     pygame.draw.rect(
         screen,
         (235, 238, 245),
@@ -259,7 +244,6 @@ while running:
         ),
     )
 
-    # Izgara
     grid_spacing = 40
 
     for x in range(
