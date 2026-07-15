@@ -9,13 +9,14 @@ class Vehicle:
         self.radius = radius
         self.heading = heading
 
-        # Arayüzden değiştirilebilir değerler
+        # Arayüzden değiştirilen değerler
         self.sensor_angle_degrees = 30.0
         self.speed_multiplier = 1.0
 
         self.sensor_offset_angle = math.radians(
             self.sensor_angle_degrees
         )
+
         self.sensor_dist = radius
 
         self.intensity_left = 0.0
@@ -31,26 +32,18 @@ class Vehicle:
         self.triggered = False
 
         self.trail = []
-        self.max_trail_length = 400
+        self.max_trail_length = 150
 
     def set_sensor_angle(self, degrees):
-        """
-        Her bir sensörün aracın orta çizgisine göre açısıdır.
-
-        Örneğin 30 derece seçilirse:
-        sol sensör +30 derece,
-        sağ sensör -30 derece olur.
-
-        Dolayısıyla iki sensör arasındaki toplam açı 60 derecedir.
-        """
         self.sensor_angle_degrees = float(degrees)
+
         self.sensor_offset_angle = math.radians(
             self.sensor_angle_degrees
         )
 
     def set_speed_multiplier(self, multiplier):
         self.speed_multiplier = max(
-            0.1,
+            0.25,
             float(multiplier),
         )
 
@@ -106,11 +99,20 @@ class Vehicle:
         dx = light_x - point_x
         dy = light_y - point_y
 
-        distance_squared = dx * dx + dy * dy
+        distance = math.sqrt(
+            dx * dx + dy * dy
+        )
 
-        # Yakındaki kaynak güçlü, uzaktaki kaynak zayıf algılanır.
-        intensity = 12000 / (
-            distance_squared + 12000
+        # Basit algılama sistemi:
+        # 250 pikselden uzaktaki ışık yok sayılır.
+        detection_range = 250.0
+
+        if distance >= detection_range:
+            return 0.0
+
+        # Yakınlaştıkça 0 ile 1 arasında artar.
+        intensity = 1.0 - (
+            distance / detection_range
         )
 
         return max(
@@ -118,36 +120,39 @@ class Vehicle:
             min(1.0, intensity),
         )
 
-    def combined_intensity(
+    def nearest_light_intensity(
         self,
         sensor_position,
         lights,
     ):
-        total_intensity = 0.0
+        """
+        Bütün ışıkların etkisini toplamaz.
+        Yalnızca sensöre en yakın ışığı kullanır.
+        """
+
+        if not lights:
+            return 0.0
+
+        highest_intensity = 0.0
 
         for light in lights:
-            total_intensity += self.intensity_at(
+            intensity = self.intensity_at(
                 sensor_position[0],
                 sensor_position[1],
                 light.x,
                 light.y,
             )
 
-        return min(
-            1.0,
-            total_intensity,
-        )
+            if intensity > highest_intensity:
+                highest_intensity = intensity
+
+        return highest_intensity
 
     def trigger_logic_output(self):
-        """
-        Her üçüncü pulse geldiğinde çağrılır.
-
-        Araç:
-        - 180 derece döner.
-        - Kısa süre kırmızı görünür.
-        """
         self.triggered = True
         self.trigger_timer = 45
+
+        # Logic output geldiğinde ters yöne dön.
         self.heading += math.pi
 
     def update(
@@ -161,52 +166,56 @@ class Vehicle:
         )
 
         self.intensity_left = (
-            self.combined_intensity(
+            self.nearest_light_intensity(
                 left_sensor,
                 lights,
             )
         )
 
         self.intensity_right = (
-            self.combined_intensity(
+            self.nearest_light_intensity(
                 right_sensor,
                 lights,
             )
         )
 
-        base_speed = (
-            0.8 * self.speed_multiplier
+        # Araç çoğunlukla sabit hızla ilerler.
+        normal_speed = (
+            1.6 * self.speed_multiplier
         )
 
-        gain = (
-            3.2 * self.speed_multiplier
+        # Işık etkisi hızı çok az değiştirir.
+        speed_effect = (
+            0.5 * self.speed_multiplier
         )
 
         # Contralateral excitatory bağlantı:
-        #
-        # Sol sensör -> sağ motor
         # Sağ sensör -> sol motor
-        #
-        # Böylece araç ışık kaynaklarına yönelir.
+        # Sol sensör -> sağ motor
         self.left_motor_speed = (
-            base_speed
-            + gain * self.intensity_right
+            normal_speed
+            + speed_effect
+            * self.intensity_right
         )
 
         self.right_motor_speed = (
-            base_speed
-            + gain * self.intensity_left
+            normal_speed
+            + speed_effect
+            * self.intensity_left
         )
 
+        # İki motorun ortalaması ileri hızdır.
         self.forward_speed = (
             self.left_motor_speed
             + self.right_motor_speed
-        ) / 2
+        ) / 2.0
 
+        # Motor farkı dönüşü sağlar.
+        # 0.035 değeri dönüşleri yumuşatır.
         self.turning_rate = (
             self.right_motor_speed
             - self.left_motor_speed
-        ) / (2 * self.radius)
+        ) * 0.12
 
         self.heading += self.turning_rate
 
@@ -220,7 +229,8 @@ class Vehicle:
             * math.sin(self.heading)
         )
 
-        # Ekranın bir tarafından çıkınca diğerinden girer.
+        # Ekranın bir kenarından çıkınca
+        # karşı kenardan devam eder.
         self.x %= width
         self.y %= height
 
@@ -247,19 +257,11 @@ class Vehicle:
             1,
             len(self.trail),
         ):
-            previous_point = (
-                self.trail[index - 1]
-            )
-
-            current_point = (
-                self.trail[index]
-            )
-
             pygame.draw.line(
                 surface,
                 (105, 125, 165),
-                previous_point,
-                current_point,
+                self.trail[index - 1],
+                self.trail[index],
                 2,
             )
 
@@ -292,7 +294,6 @@ class Vehicle:
             2,
         )
 
-        # Aracın baktığı yönü gösteren çizgi
         front_x = (
             self.x
             + math.cos(self.heading)
@@ -317,7 +318,6 @@ class Vehicle:
             self.sensor_positions()
         )
 
-        # Araç merkezi ile sensörler arasındaki kollar
         pygame.draw.line(
             surface,
             (70, 85, 115),
