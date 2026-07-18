@@ -13,7 +13,12 @@ class Slider:
         label,
         integer=False,
     ):
-        self.rect = pygame.Rect(x, y, width, 8)
+        self.rect = pygame.Rect(
+            x,
+            y,
+            width,
+            8,
+        )
 
         self.minimum = float(minimum)
         self.maximum = float(maximum)
@@ -30,14 +35,23 @@ class Slider:
             self.maximum - self.minimum
         )
 
-        return self.rect.x + ratio * self.rect.width
+        return (
+            self.rect.x
+            + ratio * self.rect.width
+        )
 
-    def set_value_from_mouse(self, mouse_x):
+    def set_value_from_mouse(
+        self,
+        mouse_x,
+    ):
         ratio = (
             mouse_x - self.rect.x
         ) / self.rect.width
 
-        ratio = max(0.0, min(1.0, ratio))
+        ratio = max(
+            0.0,
+            min(1.0, ratio),
+        )
 
         new_value = (
             self.minimum
@@ -63,24 +77,39 @@ class Slider:
             24,
         )
 
-        clickable_area = self.rect.inflate(0, 24)
+        clickable_area = self.rect.inflate(
+            0,
+            24,
+        )
 
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                if (
-                    knob_rect.collidepoint(event.pos)
-                    or clickable_area.collidepoint(event.pos)
-                ):
-                    self.dragging = True
-                    self.set_value_from_mouse(
-                        event.pos[0]
-                    )
+        if (
+            event.type
+            == pygame.MOUSEBUTTONDOWN
+            and event.button == 1
+        ):
+            if (
+                knob_rect.collidepoint(event.pos)
+                or clickable_area.collidepoint(
+                    event.pos
+                )
+            ):
+                self.dragging = True
 
-        elif event.type == pygame.MOUSEBUTTONUP:
+                self.set_value_from_mouse(
+                    event.pos[0]
+                )
+
+        elif (
+            event.type
+            == pygame.MOUSEBUTTONUP
+        ):
             if event.button == 1:
                 self.dragging = False
 
-        elif event.type == pygame.MOUSEMOTION:
+        elif (
+            event.type
+            == pygame.MOUSEMOTION
+        ):
             if self.dragging:
                 self.set_value_from_mouse(
                     event.pos[0]
@@ -175,29 +204,39 @@ class ModeButton:
 
     def clicked(self, event):
         return (
-            event.type == pygame.MOUSEBUTTONDOWN
+            event.type
+            == pygame.MOUSEBUTTONDOWN
             and event.button == 1
-            and self.rect.collidepoint(event.pos)
+            and self.rect.collidepoint(
+                event.pos
+            )
         )
 
     def draw(
         self,
         surface,
         font,
-        selected,
+        selected=False,
+        danger=False,
     ):
-        if selected:
-            background_color = (0, 220, 180)
+        if danger:
+            background = (110, 45, 58)
+            text_color = (255, 225, 230)
+            border_color = (210, 85, 105)
+
+        elif selected:
+            background = (0, 220, 180)
             text_color = (15, 20, 30)
             border_color = (0, 245, 200)
+
         else:
-            background_color = (42, 50, 68)
+            background = (42, 50, 68)
             text_color = (220, 225, 235)
             border_color = (78, 90, 115)
 
         pygame.draw.rect(
             surface,
-            background_color,
+            background,
             self.rect,
             border_radius=8,
         )
@@ -263,13 +302,15 @@ class Dashboard:
             12,
         )
 
-        content_x = self.rect.x + 25
-        content_width = self.rect.width - 50
+        content_x = self.rect.x + 20
+        content_width = self.rect.width - 40
 
-        button_gap = 10
+        button_gap = 7
+
         button_width = (
-            content_width - button_gap
-        ) // 2
+            content_width
+            - button_gap * 2
+        ) // 3
 
         self.counter_button = ModeButton(
             content_x,
@@ -281,7 +322,9 @@ class Dashboard:
         )
 
         self.memory_button = ModeButton(
-            content_x + button_width + button_gap,
+            content_x
+            + button_width
+            + button_gap,
             425,
             button_width,
             42,
@@ -289,20 +332,44 @@ class Dashboard:
             "memory",
         )
 
+        self.signal_button = ModeButton(
+            content_x
+            + (
+                button_width
+                + button_gap
+            ) * 2,
+            425,
+            button_width,
+            42,
+            "SIGNAL",
+            "signal",
+        )
+
+        # Counter ve Signal Mode slider'ı
         self.threshold_slider = Slider(
             content_x,
-            550,
+            660,
             content_width,
             2,
             10,
             3,
-            "Counter threshold",
+            "Output threshold",
             integer=True,
+        )
+
+        # Memory Mode butonu
+        self.reset_memory_button = ModeButton(
+            content_x,
+            650,
+            content_width,
+            38,
+            "RESET LEARNED SEQUENCE",
+            "reset_memory",
         )
 
         self.sensor_slider = Slider(
             content_x,
-            680,
+            755,
             content_width,
             5,
             85,
@@ -312,7 +379,7 @@ class Dashboard:
 
         self.speed_slider = Slider(
             content_x,
-            785,
+            845,
             content_width,
             0.25,
             3.0,
@@ -335,10 +402,23 @@ class Dashboard:
                 logic_network.MEMORY_MODE
             )
 
-        # Threshold slider yalnızca Counter Mode'da çalışır.
+        if self.signal_button.clicked(event):
+            logic_network.set_mode(
+                logic_network.SIGNAL_MODE
+            )
+
         if (
             logic_network.mode
-            == logic_network.COUNTER_MODE
+            == logic_network.MEMORY_MODE
+            and self.reset_memory_button.clicked(
+                event
+            )
+        ):
+            logic_network.reset_memory()
+
+        if logic_network.mode in (
+            logic_network.COUNTER_MODE,
+            logic_network.SIGNAL_MODE,
         ):
             self.threshold_slider.handle_event(
                 event
@@ -469,15 +549,18 @@ class Dashboard:
 
         general_lines = [
             f"State: {state}",
-            f"Mode: {logic_network.mode.upper()}",
+            (
+                "Mode: "
+                f"{logic_network.mode.upper()}"
+            ),
             f"Sources: {len(lights)}",
             (
                 "Last source: "
                 f"{logic_network.last_detected_source}"
             ),
             (
-                "Total pulses: "
-                f"{logic_network.total_pulses}"
+                "Last action: "
+                f"{logic_network.last_signal_action}"
             ),
             (
                 "Logic outputs: "
@@ -546,8 +629,8 @@ class Dashboard:
 
         self.counter_button.draw(
             surface,
-            self.small_font,
-            (
+            self.tiny_font,
+            selected=(
                 logic_network.mode
                 == logic_network.COUNTER_MODE
             ),
@@ -555,26 +638,46 @@ class Dashboard:
 
         self.memory_button.draw(
             surface,
-            self.small_font,
-            (
+            self.tiny_font,
+            selected=(
                 logic_network.mode
                 == logic_network.MEMORY_MODE
             ),
         )
 
+        self.signal_button.draw(
+            surface,
+            self.tiny_font,
+            selected=(
+                logic_network.mode
+                == logic_network.SIGNAL_MODE
+            ),
+        )
+
         if (
             logic_network.mode
-            == logic_network.COUNTER_MODE
+            == logic_network.MEMORY_MODE
         ):
-            self.draw_counter_information(
+            self.draw_memory_information(
+                surface,
+                logic_network,
+                x,
+            )
+
+        elif (
+            logic_network.mode
+            == logic_network.SIGNAL_MODE
+        ):
+            self.draw_signal_information(
                 surface,
                 logic_network,
                 x,
             )
 
         else:
-            self.draw_memory_information(
+            self.draw_counter_information(
                 surface,
+                vehicle,
                 logic_network,
                 x,
             )
@@ -591,30 +694,109 @@ class Dashboard:
         self.speed_slider.draw(
             surface,
             self.small_font,
-            f"{self.speed_slider.value:.2f}x",
+            (
+                f"{self.speed_slider.value:.2f}x"
+            ),
         )
 
-        self.draw_controls(
-            surface,
-            x,
-        )
+    def draw_status_boxes(
+        self,
+        surface,
+        statuses,
+        x,
+        y,
+    ):
+        status_x = x
+        status_y = y
+
+        for status in statuses:
+            is_on = status == "ON"
+
+            status_box = pygame.Rect(
+                status_x,
+                status_y,
+                48,
+                29,
+            )
+
+            if is_on:
+                background = (25, 75, 67)
+                border = (0, 220, 180)
+                text_color = (0, 235, 185)
+
+            else:
+                background = (39, 46, 62)
+                border = (73, 84, 106)
+                text_color = (180, 188, 202)
+
+            pygame.draw.rect(
+                surface,
+                background,
+                status_box,
+                border_radius=6,
+            )
+
+            pygame.draw.rect(
+                surface,
+                border,
+                status_box,
+                1,
+                border_radius=6,
+            )
+
+            status_surface = (
+                self.small_font.render(
+                    status,
+                    True,
+                    text_color,
+                )
+            )
+
+            surface.blit(
+                status_surface,
+                status_surface.get_rect(
+                    center=status_box.center
+                ),
+            )
+
+            status_x += 55
+
+            if (
+                status_x
+                > self.rect.right - 60
+            ):
+                status_x = x
+                status_y += 36
 
     def draw_counter_information(
         self,
         surface,
+        vehicle,
         logic_network,
         x,
     ):
         self.draw_text(
             surface,
-            (
-                "Current cycle: "
-                f"{logic_network.pulse_count}"
-                f"/{logic_network.counter_threshold}"
-            ),
-            (x, 490),
+            "Threshold devices",
+            (x, 495),
             self.small_font,
             (205, 212, 225),
+        )
+
+        statuses = (
+            logic_network
+            .counter_device_statuses(
+                output_is_visible=(
+                    vehicle.triggered
+                )
+            )
+        )
+
+        self.draw_status_boxes(
+            surface,
+            statuses,
+            x,
+            523,
         )
 
         self.threshold_slider.draw(
@@ -627,35 +809,17 @@ class Dashboard:
             ),
         )
 
-        self.draw_text(
-            surface,
-            (
-                "Output occurs when the pulse "
-                "count reaches"
-            ),
-            (x, 585),
-            self.tiny_font,
-            (150, 165, 190),
-        )
-
-        self.draw_text(
-            surface,
-            "the selected threshold.",
-            (x, 603),
-            self.tiny_font,
-            (150, 165, 190),
-        )
-
     def draw_memory_information(
         self,
         surface,
         logic_network,
         x,
     ):
-        if logic_network.learning_complete:
-            memory_state = "RECOGNIZING"
-        else:
-            memory_state = "LEARNING"
+        memory_state = (
+            "RECOGNIZING"
+            if logic_network.learning_complete
+            else "LEARNING"
+        )
 
         self.draw_text(
             surface,
@@ -668,27 +832,30 @@ class Dashboard:
         self.draw_text(
             surface,
             "Learned sequence",
-            (x, 520),
+            (x, 522),
             self.tiny_font,
             (150, 165, 190),
+        )
+
+        learned_box = pygame.Rect(
+            x,
+            542,
+            self.rect.width - 40,
+            38,
         )
 
         pygame.draw.rect(
             surface,
             (35, 43, 59),
-            pygame.Rect(
-                x,
-                540,
-                self.rect.width - 40,
-                38,
-            ),
+            learned_box,
             border_radius=7,
         )
 
         self.draw_text(
             surface,
-            logic_network.learned_sequence_text(),
-            (x + 10, 550),
+            logic_network
+            .learned_sequence_text(),
+            (x + 10, 552),
             self.small_font,
             (0, 220, 180),
         )
@@ -701,56 +868,104 @@ class Dashboard:
             (150, 165, 190),
         )
 
+        current_box = pygame.Rect(
+            x,
+            610,
+            self.rect.width - 40,
+            38,
+        )
+
         pygame.draw.rect(
             surface,
             (35, 43, 59),
-            pygame.Rect(
-                x,
-                610,
-                self.rect.width - 40,
-                38,
-            ),
+            current_box,
             border_radius=7,
         )
 
         self.draw_text(
             surface,
-            logic_network.current_sequence_text(),
+            logic_network
+            .current_sequence_text(),
             (x + 10, 620),
             self.small_font,
             (255, 205, 90),
         )
 
-    def draw_controls(
-        self,
-        surface,
-        x,
-    ):
-        controls_y = 850
-
-        self.draw_section_title(
+        self.reset_memory_button.draw(
             surface,
-            "CONTROLS",
-            x,
-            controls_y,
+            self.small_font,
+            danger=True,
         )
 
-        controls_y += 27
+    def draw_signal_information(
+        self,
+        surface,
+        logic_network,
+        x,
+    ):
+        self.draw_text(
+            surface,
+            (
+                "Activation: "
+                f"{logic_network.pulse_count}"
+                f"/{logic_network.counter_threshold}"
+            ),
+            (x, 490),
+            self.small_font,
+            (235, 240, 250),
+        )
 
-        control_lines = [
-            "Left drag: move source",
-            "Right click: add source",
-            "Space: pause | R: reset",
-            "Esc: exit",
+        legend = [
+            (
+                "Yellow   +1 excitation",
+                (255, 215, 70),
+            ),
+            (
+                "Red      -1 inhibition",
+                (255, 90, 105),
+            ),
+            (
+                "Green    -2 inhibition",
+                (80, 220, 150),
+            ),
+            (
+                "Purple   +2 excitation",
+                (170, 110, 255),
+            ),
         ]
 
-        for line in control_lines:
-            self.draw_text(
+        legend_y = 525
+
+        for text, color in legend:
+            pygame.draw.circle(
                 surface,
-                line,
-                (x, controls_y),
-                self.tiny_font,
-                (175, 185, 202),
+                color,
+                (
+                    x + 6,
+                    legend_y + 7,
+                ),
+                6,
             )
 
-            controls_y += 17
+            self.draw_text(
+                surface,
+                text,
+                (
+                    x + 20,
+                    legend_y,
+                ),
+                self.tiny_font,
+                (205, 212, 225),
+            )
+
+            legend_y += 23
+
+        self.threshold_slider.draw(
+            surface,
+            self.small_font,
+            str(
+                int(
+                    self.threshold_slider.value
+                )
+            ),
+        )

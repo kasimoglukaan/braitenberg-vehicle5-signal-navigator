@@ -9,10 +9,13 @@ from vehicle import Vehicle
 pygame.init()
 
 SIMULATION_WIDTH = 780
-DASHBOARD_WIDTH = 370
+DASHBOARD_WIDTH = 390
 
 HEIGHT = 910
-WIDTH = SIMULATION_WIDTH + DASHBOARD_WIDTH
+WIDTH = (
+    SIMULATION_WIDTH
+    + DASHBOARD_WIDTH
+)
 
 screen = pygame.display.set_mode(
     (WIDTH, HEIGHT)
@@ -34,35 +37,46 @@ label_font = pygame.font.SysFont(
 
 def create_lights():
     return [
+        # Sarı: +1
         Light(
             145,
             145,
-            (255, 215, 70),
-            "1",
+            label="1",
+            source_type="excitatory",
         ),
+
+        # Kırmızı: -1
         Light(
             590,
             150,
-            (255, 150, 70),
-            "2",
+            label="2",
+            source_type="inhibitory",
         ),
+
+        # Yeşil: -2
         Light(
             660,
             650,
-            (255, 100, 130),
-            "3",
+            label="3",
+            source_type=(
+                "strong_inhibitory"
+            ),
         ),
+
+        # Mor: +2
         Light(
             190,
             700,
-            (170, 110, 255),
-            "4",
+            label="4",
+            source_type="boost",
         ),
+
+        # Sarı: +1
         Light(
             410,
             410,
-            (80, 220, 180),
-            "5",
+            label="5",
+            source_type="excitatory",
         ),
     ]
 
@@ -99,6 +113,16 @@ selected_light = None
 paused = False
 running = True
 
+# Sağ tıklamayla eklenen kaynakların sırası
+source_type_order = [
+    "excitatory",
+    "inhibitory",
+    "strong_inhibitory",
+    "boost",
+]
+
+next_source_type_index = 0
+
 
 while running:
     for event in pygame.event.get():
@@ -118,7 +142,9 @@ while running:
                 paused = not paused
 
             elif event.key == pygame.K_r:
-                selected_mode = logic_network.mode
+                selected_mode = (
+                    logic_network.mode
+                )
 
                 (
                     vehicle,
@@ -132,40 +158,72 @@ while running:
 
                 selected_light = None
 
-        elif event.type == pygame.MOUSEBUTTONDOWN:
-            if event.pos[0] < SIMULATION_WIDTH:
+        elif (
+            event.type
+            == pygame.MOUSEBUTTONDOWN
+        ):
+            if (
+                event.pos[0]
+                < SIMULATION_WIDTH
+            ):
+                # Sol tıklama:
+                # Kaynağı seç ve sürükle.
                 if event.button == 1:
                     selected_light = None
 
-                    for light in reversed(lights):
-                        if light.contains(event.pos):
-                            selected_light = light
+                    for light in reversed(
+                        lights
+                    ):
+                        if light.contains(
+                            event.pos
+                        ):
+                            selected_light = (
+                                light
+                            )
                             break
 
+                # Sağ tıklama:
+                # Yeni kaynak oluştur.
                 elif event.button == 3:
-                    new_label = str(
-                        len(lights) + 1
+                    source_type = (
+                        source_type_order[
+                            next_source_type_index
+                        ]
                     )
 
-                    lights.append(
-                        Light(
-                            event.pos[0],
-                            event.pos[1],
-                            (255, 205, 70),
-                            new_label,
-                        )
+                    next_source_type_index = (
+                        next_source_type_index
+                        + 1
+                    ) % len(source_type_order)
+
+                    new_light = Light(
+                        event.pos[0],
+                        event.pos[1],
+                        label=str(
+                            len(lights) + 1
+                        ),
+                        source_type=source_type,
                     )
 
-        elif event.type == pygame.MOUSEBUTTONUP:
+                    lights.append(new_light)
+
+        elif (
+            event.type
+            == pygame.MOUSEBUTTONUP
+        ):
             if event.button == 1:
                 selected_light = None
 
-        elif event.type == pygame.MOUSEMOTION:
+        elif (
+            event.type
+            == pygame.MOUSEMOTION
+        ):
             if selected_light is not None:
                 mouse_x = max(
                     20,
                     min(
-                        SIMULATION_WIDTH - 20,
+                        SIMULATION_WIDTH
+                        - 20,
                         event.pos[0],
                     ),
                 )
@@ -179,7 +237,10 @@ while running:
                 )
 
                 selected_light.move(
-                    (mouse_x, mouse_y)
+                    (
+                        mouse_x,
+                        mouse_y,
+                    )
                 )
 
     dashboard.apply_settings(
@@ -208,27 +269,36 @@ while running:
                 + 20
             )
 
+            # Araç kaynağa ilk kez girdiğinde
+            # bir pulse üret.
             if (
-                distance <= detection_distance
+                distance
+                <= detection_distance
                 and not light.detected
             ):
                 light.detected = True
 
                 output_active = (
                     logic_network.receive_pulse(
-                        light.label
+                        source_id=light.label,
+                        source_type=(
+                            light.source_type
+                        ),
                     )
                 )
 
                 if output_active:
                     vehicle.trigger_logic_output()
 
+            # Araç kaynaktan yeterince uzaklaşınca
+            # kaynak tekrar algılanabilir hâle gelir.
             elif (
                 distance
                 > detection_distance + 25
             ):
                 light.detected = False
 
+    # Simülasyon arka planı
     screen.fill(
         (235, 238, 245)
     )
@@ -244,9 +314,10 @@ while running:
         ),
     )
 
+    # Izgara
     grid_spacing = 40
 
-    for x in range(
+    for grid_x in range(
         0,
         SIMULATION_WIDTH,
         grid_spacing,
@@ -254,11 +325,17 @@ while running:
         pygame.draw.line(
             screen,
             (215, 220, 230),
-            (x, 0),
-            (x, HEIGHT),
+            (
+                grid_x,
+                0,
+            ),
+            (
+                grid_x,
+                HEIGHT,
+            ),
         )
 
-    for y in range(
+    for grid_y in range(
         0,
         HEIGHT,
         grid_spacing,
@@ -266,23 +343,30 @@ while running:
         pygame.draw.line(
             screen,
             (215, 220, 230),
-            (0, y),
+            (
+                0,
+                grid_y,
+            ),
             (
                 SIMULATION_WIDTH,
-                y,
+                grid_y,
             ),
         )
 
+    # Araç izi
     vehicle.draw_trail(screen)
 
+    # Kaynaklar
     for light in lights:
         light.draw(
             screen,
             label_font,
         )
 
+    # Araç
     vehicle.draw(screen)
 
+    # Sağ panel
     dashboard.draw(
         screen,
         vehicle,
